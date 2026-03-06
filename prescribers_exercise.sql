@@ -9,74 +9,55 @@ More information about the data is contained in the Methodology PDF file. See al
 -- 1a. Which prescriber had the highest total number of claims (totaled over all drugs)? Report the npi and the total number of claims.
 
 -- ANSWER: NPI(1881634483), TOTAL_CLAIM_COUNT(99,707)
-SELECT
-	P.NPI,
+SELECT P.NPI,
 	SUM(R.TOTAL_CLAIM_COUNT) AS TOTAL_CLAIM_COUNT
-FROM
-	PRESCRIBER P
+FROM PRESCRIBER P
 	LEFT JOIN PRESCRIPTION R ON P.NPI = R.NPI
-GROUP BY
-	P.NPI
-ORDER BY
-	TOTAL_CLAIM_COUNT DESC NULLS LAST
+GROUP BY P.NPI
+ORDER BY TOTAL_CLAIM_COUNT DESC NULLS LAST
 LIMIT 1;
 
 
 -- 1b. Repeat the above, but this time report the nppes_provider_first_name, nppes_provider_last_org_name, specialty_description, and the total number of claims.
 
 -- ANSWER: NPPES_PROVIDER_FIRST_NAME(BRUCE), NPPES_PROVIDER_LAST_ORG_NAME(PENDLEY), SPECIALTY_DESCRIPTION(Family Practice), TOTAL_CLAIM_COUNT(99,707)
-SELECT
-	P.NPPES_PROVIDER_FIRST_NAME,
+SELECT P.NPPES_PROVIDER_FIRST_NAME,
 	P.NPPES_PROVIDER_LAST_ORG_NAME,
 	P.SPECIALTY_DESCRIPTION,
 	SUM(R.TOTAL_CLAIM_COUNT) AS TOTAL_CLAIM_COUNT
-FROM
-	PRESCRIBER P
+FROM PRESCRIBER P
 	LEFT JOIN PRESCRIPTION R ON P.NPI = R.NPI
-GROUP BY
-	P.NPPES_PROVIDER_FIRST_NAME,
+GROUP BY P.NPPES_PROVIDER_FIRST_NAME,
 	P.NPPES_PROVIDER_LAST_ORG_NAME,
 	P.SPECIALTY_DESCRIPTION
-ORDER BY
-	TOTAL_CLAIM_COUNT DESC NULLS LAST
+ORDER BY TOTAL_CLAIM_COUNT DESC NULLS LAST
 LIMIT 1;
 
 
 -- 2a. Which specialty had the most total number of claims (totaled over all drugs)?
 
 -- ANSWER: SPECIALTY_DESCRIPTION(Family Practice), TOTAL_CLAIM_COUNT(9,752,347)
-SELECT
-	P.SPECIALTY_DESCRIPTION,
+SELECT P.SPECIALTY_DESCRIPTION,
 	SUM(R.TOTAL_CLAIM_COUNT) AS TOTAL_CLAIM_COUNT
-FROM
-	PRESCRIBER P
+FROM PRESCRIBER P
 	LEFT JOIN PRESCRIPTION R ON P.NPI = R.NPI
-GROUP BY
-	P.SPECIALTY_DESCRIPTION
-ORDER BY
-	TOTAL_CLAIM_COUNT DESC NULLS LAST
-LIMIT
-	1;
+GROUP BY P.SPECIALTY_DESCRIPTION
+ORDER BY TOTAL_CLAIM_COUNT DESC NULLS LAST
+LIMIT 1;
 
 
 -- 2b. Which specialty had the most total number of claims for opioids?
 
 -- ANSWER: SPECIALTY_DESCRIPTION(Nurse Practitioner), TOTAL_CLAIM_COUNT(900,845)
-SELECT
-	P.SPECIALTY_DESCRIPTION,
+SELECT P.SPECIALTY_DESCRIPTION,
 	SUM(R.TOTAL_CLAIM_COUNT) AS TOTAL_CLAIM_COUNT
-FROM
-	PRESCRIBER P
+FROM PRESCRIBER P
 	LEFT JOIN PRESCRIPTION R ON P.NPI = R.NPI
 	LEFT JOIN DRUG D ON R.DRUG_NAME = D.DRUG_NAME
-WHERE
-	D.OPIOID_DRUG_FLAG = 'Y'
-GROUP BY
-	P.SPECIALTY_DESCRIPTION
-ORDER BY
-	TOTAL_CLAIM_COUNT DESC
-LIMIT
-	1;
+WHERE D.OPIOID_DRUG_FLAG = 'Y'
+GROUP BY P.SPECIALTY_DESCRIPTION
+ORDER BY TOTAL_CLAIM_COUNT DESC
+LIMIT 1;
 
 
 -- 2c. **Challenge Question:** Are there any specialties that appear in the prescriber table that have no associated prescriptions in the prescription table?
@@ -86,7 +67,8 @@ LIMIT
 -- 3a. Which drug (generic_name) had the highest total drug cost?
 
 -- ANSWER: GENERIC_NAME(PIRFENIDONE), TOTAL_DRUG_COST($2,829,174.30)
-SELECT D.GENERIC_NAME, R.TOTAL_DRUG_COST
+SELECT D.GENERIC_NAME,
+	R.TOTAL_DRUG_COST
 FROM PRESCRIPTION R
 	LEFT JOIN DRUG D ON R.DRUG_NAME = D.DRUG_NAME
 ORDER BY R.TOTAL_DRUG_COST DESC NULLS LAST
@@ -95,10 +77,54 @@ LIMIT 1;
 
 -- 3b. Which drug (generic_name) has the hightest total cost per day? **Bonus: Round your cost per day column to 2 decimal places. Google ROUND to see how this works.**
 
+-- ANSWER: GENERIC_NAME(FOLIC ACID), TOTAL_COST_PER_DAY($19.59)
+SELECT D.GENERIC_NAME,
+	SUM(R.TOTAL_DAY_SUPPLY) AS SUM_TOTAL_DAY_SUPPLY,
+	SUM(R.TOTAL_DRUG_COST) AS SUM_TOTAL_DRUG_COST,
+	ROUND(SUM(R.TOTAL_DAY_SUPPLY) / SUM(R.TOTAL_DRUG_COST), 2) AS TOTAL_COST_PER_DAY
+FROM PRESCRIPTION R
+	LEFT JOIN DRUG D ON R.DRUG_NAME = D.DRUG_NAME
+GROUP BY D.GENERIC_NAME
+ORDER BY TOTAL_COST_PER_DAY DESC
+LIMIT 1;
 
--- 4a. For each drug in the drug table, return the drug name and then a column named 'drug_type' which says 'opioid' for drugs which have opioid_drug_flag = 'Y', says 'antibiotic' for those drugs which have antibiotic_drug_flag = 'Y', and says 'neither' for all other drugs. **Hint:** You may want to use a CASE expression for this. See https://www.postgresqltutorial.com/postgresql-tutorial/postgresql-case/ 
--- 4b. Building off of the query you wrote for part a, determine whether more was spent (total_drug_cost) on opioids or on antibiotics. Hint: Format the total costs as MONEY for easier comparision.
+
+-- 4a. For each drug in the drug table, return the drug name and then a column named 'drug_type' which says 'opioid' for drugs which have 
+-- opioid_drug_flag = 'Y', says 'antibiotic' for those drugs which have antibiotic_drug_flag = 'Y', and says 'neither' for all other drugs. 
+-- **Hint:** You may want to use a CASE expression for this. See https://www.postgresqltutorial.com/postgresql-tutorial/postgresql-case/ 
+
+SELECT DRUG_NAME,
+	CASE
+		WHEN OPIOID_DRUG_FLAG = 'Y' THEN 'OPIOID'
+		WHEN ANTIBIOTIC_DRUG_FLAG = 'Y' THEN 'ANTIBIOTIC'
+		ELSE 'NEITHER'
+	END DRUG_TYPE
+FROM DRUG;
+
+
+-- 4b. Building off of the query you wrote for part a, determine whether more was spent (total_drug_cost) on opioids or on antibiotics. 
+-- Hint: Format the total costs as MONEY for easier comparision.
+
+-- ANSWER: More money was spent on opioids $105,080,626.37
+SELECT 	
+	CASE
+		WHEN D.OPIOID_DRUG_FLAG = 'Y' THEN 'OPIOID'
+		WHEN D.ANTIBIOTIC_DRUG_FLAG = 'Y' THEN 'ANTIBIOTIC'
+		ELSE 'NEITHER'
+	END DRUG_TYPE,
+	SUM(TOTAL_DRUG_COST) AS SUM_TOTAL_DRUG_COST
+FROM DRUG D
+	LEFT JOIN PRESCRIPTION R ON D.DRUG_NAME = R.DRUG_NAME
+GROUP BY DRUG_TYPE
+ORDER BY SUM_TOTAL_DRUG_COST DESC;
+
+
 -- 5a. How many CBSAs are in Tennessee? **Warning:** The cbsa table contains information for all states, not just Tennessee.
+
+-- ANSWER:
+
+
+
 -- 5b. Which cbsa has the largest combined population? Which has the smallest? Report the CBSA name and total population.
 -- 5c. What is the largest (in terms of population) county which is not included in a CBSA? Report the county name and population.
 -- 6a. Find all rows in the prescription table where total_claims is at least 3000. Report the drug_name and the total_claim_count.
