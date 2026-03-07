@@ -9,11 +9,10 @@ More information about the data is contained in the Methodology PDF file. See al
 -- 1a. Which prescriber had the highest total number of claims (totaled over all drugs)? Report the npi and the total number of claims.
 
 -- ANSWER: NPI(1881634483), TOTAL_CLAIM_COUNT(99,707)
-SELECT P.NPI,
-	SUM(R.TOTAL_CLAIM_COUNT) AS TOTAL_CLAIM_COUNT
-FROM PRESCRIBER P
-	LEFT JOIN PRESCRIPTION R ON P.NPI = R.NPI
-GROUP BY P.NPI
+SELECT NPI,
+	SUM(TOTAL_CLAIM_COUNT) AS TOTAL_CLAIM_COUNT
+FROM PRESCRIPTION
+GROUP BY NPI
 ORDER BY TOTAL_CLAIM_COUNT DESC NULLS LAST
 LIMIT 1;
 
@@ -61,16 +60,53 @@ LIMIT 1;
 
 
 -- 2c. **Challenge Question:** Are there any specialties that appear in the prescriber table that have no associated prescriptions in the prescription table?
--- 2d. **Difficult Bonus:** *Do not attempt until you have solved all other problems!* For each specialty, report the percentage of total claims by that specialty which are for opioids. Which specialties have a high percentage of opioids?
+SELECT P.SPECIALTY_DESCRIPTION, SUM(R.TOTAL_CLAIM_COUNT) AS TOTAL_CLAIM_COUNT
+FROM PRESCRIBER P
+	LEFT JOIN PRESCRIPTION R ON P.NPI = R.NPI
+GROUP BY P.SPECIALTY_DESCRIPTION
+HAVING SUM(R.TOTAL_CLAIM_COUNT) IS NULL;
+
+
+-- 2d. **Difficult Bonus:** *Do not attempt until you have solved all other problems!* 
+-- For each specialty, report the percentage of total claims by that specialty which are for opioids. 
+-- Which specialties have a high percentage of opioids?
+SELECT
+	SPECIALTY_DESCRIPTION,
+	ROUND(SUM(
+		CASE
+			WHEN OPIOID_DRUG_FLAG = 'Y' THEN TOTAL_CLAIM_COUNT
+			ELSE 0
+		END
+	) / SUM(TOTAL_CLAIM_COUNT), 3) AS PCT_CLAIMS_OPIOID
+FROM
+	PRESCRIBER
+	LEFT JOIN PRESCRIPTION USING (NPI)
+	INNER JOIN DRUG USING (DRUG_NAME)
+GROUP BY
+	SPECIALTY_DESCRIPTION
+ORDER BY
+	PCT_CLAIMS_OPIOID DESC;
+
+
+-- 3a. Which drug (generic_name) had the highest total drug cost?
+
+-- ANSWER: GENERIC_NAME(INSULIN GLARGINE,HUM.REC.ANLOG), TOTAL_DRUG_COST($104,264,066.35)
+SELECT D.GENERIC_NAME,
+	SUM(R.TOTAL_DRUG_COST) AS SUM_TOTAL_DRUG_COST
+FROM PRESCRIPTION R
+	LEFT JOIN DRUG D ON R.DRUG_NAME = D.DRUG_NAME
+GROUP BY D.GENERIC_NAME
+ORDER BY SUM_TOTAL_DRUG_COST DESC NULLS LAST
+LIMIT 1;
 
 
 -- 3b. Which drug (generic_name) has the hightest total cost per day? **Bonus: Round your cost per day column to 2 decimal places. Google ROUND to see how this works.**
 
--- ANSWER: GENERIC_NAME(FOLIC ACID), TOTAL_COST_PER_DAY($19.59)
+-- ANSWER: GENERIC_NAME(C1 ESTERASE INHIBITOR), TOTAL_COST_PER_DAY($3,495.22)
 SELECT D.GENERIC_NAME,
 	SUM(R.TOTAL_DAY_SUPPLY) AS SUM_TOTAL_DAY_SUPPLY,
 	SUM(R.TOTAL_DRUG_COST) AS SUM_TOTAL_DRUG_COST,
-	ROUND(SUM(R.TOTAL_DAY_SUPPLY) / SUM(R.TOTAL_DRUG_COST), 2) AS TOTAL_COST_PER_DAY
+	ROUND(SUM(R.TOTAL_DRUG_COST) / SUM(R.TOTAL_DAY_SUPPLY), 2) AS TOTAL_COST_PER_DAY
 FROM PRESCRIPTION R
 	LEFT JOIN DRUG D ON R.DRUG_NAME = D.DRUG_NAME
 GROUP BY D.GENERIC_NAME
@@ -101,7 +137,7 @@ SELECT
 		WHEN D.ANTIBIOTIC_DRUG_FLAG = 'Y' THEN 'ANTIBIOTIC'
 		ELSE 'NEITHER'
 	END DRUG_TYPE,
-	SUM(TOTAL_DRUG_COST) AS SUM_TOTAL_DRUG_COST
+	CAST(SUM(TOTAL_DRUG_COST) AS MONEY) AS SUM_TOTAL_DRUG_COST -- SUM(TOTAL_DRUG_COST)::MONEY
 FROM DRUG D
 	LEFT JOIN PRESCRIPTION R ON D.DRUG_NAME = R.DRUG_NAME
 GROUP BY DRUG_TYPE
@@ -110,19 +146,33 @@ ORDER BY SUM_TOTAL_DRUG_COST DESC;
 
 -- 5a. How many CBSAs are in Tennessee? **Warning:** The cbsa table contains information for all states, not just Tennessee.
 
--- ANSWER: 6 CBSAs in TN
-SELECT DISTINCT CBSA
-FROM CBSA
-WHERE CBSANAME ~ '.TN$';
+-- ANSWER: 10 CBSAs in TN
+-- SELECT DISTINCT CBSA
+-- FROM CBSA
+-- WHERE CBSANAME ~ '.TN$';
+
+SELECT COUNT(DISTINCT CBSA)
+FROM CBSA C
+	INNER JOIN FIPS_COUNTY F ON C.FIPSCOUNTY = F.FIPSCOUNTY
+WHERE F.STATE = 'TN';
 
 
 -- 5b. Which cbsa has the largest combined population? Which has the smallest? Report the CBSA name and total population.
 
 -- ANSWER: Largest population is Nashville(1,830,410), smallest population is Morristown(116,352)
-SELECT C.CBSANAME, SUM(P.POPULATION) AS TOTAL_POPULATION
+-- SELECT C.CBSANAME, SUM(P.POPULATION) AS TOTAL_POPULATION
+-- FROM CBSA C
+-- 	LEFT JOIN POPULATION P ON C.FIPSCOUNTY = P.FIPSCOUNTY
+-- WHERE C.CBSANAME ~ '.TN$'
+-- GROUP BY C.CBSANAME
+-- ORDER BY TOTAL_POPULATION DESC;
+
+SELECT C.CBSANAME,
+	SUM(P.POPULATION) AS TOTAL_POPULATION
 FROM CBSA C
 	LEFT JOIN POPULATION P ON C.FIPSCOUNTY = P.FIPSCOUNTY
-WHERE C.CBSANAME ~ '.TN$'
+	INNER JOIN FIPS_COUNTY FC ON C.FIPSCOUNTY = FC.FIPSCOUNTY
+WHERE STATE = 'TN'
 GROUP BY C.CBSANAME
 ORDER BY TOTAL_POPULATION DESC;
 
@@ -139,7 +189,8 @@ ORDER BY P.POPULATION DESC
 LIMIT 1;
 
 
--- 6a. Find all rows in the prescription table where total_claims is at least 3000. Report the drug_name and the total_claim_count.
+-- 6a. Find all rows in the prescription table where total_claims is at least 3000. 
+-- Report the drug_name and the total_claim_count.
 
 -- ANSWER: 9 rows
 SELECT DRUG_NAME, TOTAL_CLAIM_COUNT
@@ -150,7 +201,6 @@ ORDER BY TOTAL_CLAIM_COUNT DESC;
 
 -- 6b. For each instance that you found in part a, add a column that indicates whether the drug is an opioid.
 
--- ANSWER: 2 opioids
 SELECT R.DRUG_NAME, R.TOTAL_CLAIM_COUNT, D.OPIOID_DRUG_FLAG
 FROM PRESCRIPTION R
 	LEFT JOIN DRUG D ON R.DRUG_NAME = D.DRUG_NAME
@@ -198,6 +248,22 @@ FROM PRESCRIPTION R
 GROUP BY PD.NPI, PD.DRUG_NAME
 ORDER BY PD.NPI, PD.DRUG_NAME;
 
+SELECT
+	PRESCRIBER.NPI,
+	DRUG.DRUG_NAME,
+	SUM(TOTAL_CLAIM_COUNT) AS TOTALCLAIMS
+FROM
+	PRESCRIBER
+	CROSS JOIN DRUG
+	LEFT JOIN PRESCRIPTION USING (NPI, DRUG_NAME)
+WHERE
+	SPECIALTY_DESCRIPTION = 'Pain Management'
+	AND NPPES_PROVIDER_CITY = 'NASHVILLE'
+	AND OPIOID_DRUG_FLAG = 'Y'
+GROUP BY
+	NPI,
+	DRUG.DRUG_NAME;
+
 
 -- 7c. Finally, if you have not done so already, fill in any missing values for total_claim_count with 0. Hint - Google the COALESCE function.
 
@@ -211,3 +277,19 @@ FROM PRESCRIPTION R
 			AND D.OPIOID_DRUG_FLAG = 'Y') AS PD ON R.DRUG_NAME = PD.DRUG_NAME
 GROUP BY PD.NPI, PD.DRUG_NAME
 ORDER BY PD.NPI, PD.DRUG_NAME;
+
+SELECT
+	PRESCRIBER.NPI,
+	DRUG.DRUG_NAME,
+	COALESCE(SUM(TOTAL_CLAIM_COUNT), 0) AS TOTALCLAIMS
+FROM
+	PRESCRIBER
+	CROSS JOIN DRUG
+	LEFT JOIN PRESCRIPTION USING (NPI, DRUG_NAME)
+WHERE
+	SPECIALTY_DESCRIPTION = 'Pain Management'
+	AND NPPES_PROVIDER_CITY = 'NASHVILLE'
+	AND OPIOID_DRUG_FLAG = 'Y'
+GROUP BY
+	NPI,
+	DRUG.DRUG_NAME;
